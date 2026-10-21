@@ -985,13 +985,28 @@ async function getFileBytes(fileId) {
 // ── Init ─────────────────────────────────────────────────────────
 // Firebase (onAuthStateChanged, below) is the source of truth for who is
 // signed in. It fires on load and restores the session across devices.
+let pendingUpgrade = false;
 function init() {
-  // Stripe success: flip plan to lifetime and persist to the cloud profile.
-  const params = new URLSearchParams(location.search);
+  // Stripe success: detect ?upgraded=1 in the query OR after a #hash.
+  const hashQuery = location.hash.includes('?') ? location.hash.split('?')[1] : '';
+  const params = new URLSearchParams(location.search || '?' + hashQuery);
   if (params.get('upgraded') === '1') {
-    activatePlan('lifetime');
+    pendingUpgrade = true;            // apply once the user is authenticated
     history.replaceState({}, '', location.pathname);
+    applyPendingUpgradeIfReady();
+  }
+}
+
+// Flip the account to Lifetime and persist to the cloud — but only once a
+// signed-in user exists, so the paid status actually saves to their profile.
+function applyPendingUpgradeIfReady() {
+  if (pendingUpgrade && currentUser) {
+    pendingUpgrade = false;
+    activatePlan('lifetime');
     showToast('🎉 Lifetime access activated!', 'success');
+  } else if (pendingUpgrade && !currentUser) {
+    showToast('Sign in to finish unlocking your Lifetime access', 'info');
+    openAuth();
   }
 }
 
@@ -1049,6 +1064,7 @@ async function finishSignIn(user) {
   showApp();                         // show shell immediately
   showToast(`Signed in as ${user.email}`, 'success');
   await cloudLoadMeta();             // pull plan + set metadata from Firestore
+  applyPendingUpgradeIfReady();      // if they just came back from Stripe, unlock now
   updateNavUser();
   renderSidebar();
   renderSidebarFooter();
@@ -1485,7 +1501,7 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cAppendy build v9 — auto-create set + visible error reporting ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cAppendy build v10 — robust post-payment unlock (applies after sign-in) ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
