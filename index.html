@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocStack – Your documents, organised</title>
-  <meta name="description" content="Organise PDFs and images into tidy folders. Reorder pages and export one clean PDF — no subscriptions." />
+  <title>Appendy – Merge PDFs &amp; images into one clean file</title>
+  <meta name="description" content="Appendy combines your PDFs, scans and photos into a single ordered PDF. Free to start, pay once for unlimited. For students, finance, job seekers and everyone with paperwork." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -410,10 +410,42 @@
     .usage-bar-fill.full { background: linear-gradient(90deg, #ef4444, #f87171); }
 
     /* ── Landing (signed out) ────────────────────────────────── */
+    #landingView { overflow-y: auto; height: calc(100vh - 58px); }
     .landing {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      min-height: calc(100vh - 58px); padding: 56px 20px; text-align: center;
+      min-height: calc(100vh - 58px); padding: 72px 20px; text-align: center;
     }
+
+    /* ── Who-uses section ────────────────────────────────────── */
+    .use-cases { max-width: 1040px; margin: 0 auto; padding: 24px 20px 96px; }
+    .use-cases-head { text-align: center; max-width: 560px; margin: 0 auto 40px; }
+    .use-cases-head .eyebrow {
+      font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      color: #c4b5fd; margin-bottom: 12px;
+    }
+    .use-cases-head h2 { font-size: clamp(1.7rem, 3.5vw, 2.4rem); font-weight: 800; letter-spacing: -.035em; margin-bottom: 12px; }
+    .use-cases-head p { color: var(--muted); font-size: 1rem; line-height: 1.6; }
+    .use-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 16px;
+    }
+    .use-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 24px 22px; text-align: left;
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+    .use-card:hover {
+      transform: translateY(-4px); border-color: #6366f150;
+      box-shadow: 0 16px 40px -16px #6366f160;
+    }
+    .use-icon {
+      width: 48px; height: 48px; border-radius: 14px; background: var(--grad-soft);
+      display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin-bottom: 14px;
+    }
+    .use-card h3 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; margin-bottom: 7px; }
+    .use-card p { font-size: .875rem; color: var(--muted); line-height: 1.6; }
+    .use-cta { text-align: center; margin-top: 48px; }
+    .use-cta-note { margin-top: 14px; font-size: .82rem; color: var(--muted); }
     .landing > * { animation: fadeUp .6s ease backwards; }
     .landing-badge { animation-delay: .05s; }
     .landing h1 { animation-delay: .12s; }
@@ -481,7 +513,7 @@
       <rect x="14" y="12" width="7" height="9" rx="1.5"/>
       <rect x="3" y="16" width="7" height="5" rx="1.5"/>
     </svg>
-    DocStack
+    Appendy
   </a>
 
   <!-- signed-out state -->
@@ -506,9 +538,9 @@
 <!-- ── Landing page (signed out) ───────────────────────────────── -->
 <div id="landingView">
   <section class="landing">
-    <div class="landing-badge">✦ Free to start · No subscription</div>
-    <h1>Your documents,<br /><span>beautifully organised</span></h1>
-    <p>Combine PDFs and images into neat document sets. Reorder pages, then export a single clean PDF — all in your browser.</p>
+    <div class="landing-badge">✦ Free to start · Pay once · No subscription</div>
+    <h1>Merge your PDFs and images<br /><span>into one clean file</span></h1>
+    <p>Appendy turns scattered PDFs, scans and photos into a single, neatly ordered PDF. Drag to reorder, click once, done — no software to install.</p>
     <div class="landing-actions">
       <button class="btn btn-primary btn-lg" onclick="openAuth()">Get started free</button>
       <button class="btn btn-secondary btn-lg" onclick="openPricing()">See pricing</button>
@@ -517,23 +549,93 @@
       <div class="feat-card">
         <div class="feat-card-icon">📂</div>
         <div class="feat-card-title">Document sets</div>
-        <div class="feat-card-desc">Group related files into named sets. Keep projects separate.</div>
+        <div class="feat-card-desc">Group related files into named sets so every project stays separate and tidy.</div>
       </div>
       <div class="feat-card">
         <div class="feat-card-icon">↕️</div>
         <div class="feat-card-title">Drag to reorder</div>
-        <div class="feat-card-desc">Rearrange pages in any order before you export.</div>
+        <div class="feat-card-desc">Put pages in exactly the order you need before you export.</div>
       </div>
       <div class="feat-card">
         <div class="feat-card-icon">⚡</div>
-        <div class="feat-card-title">One-click export</div>
-        <div class="feat-card-desc">Combine everything into a single PDF, instantly.</div>
+        <div class="feat-card-title">One-click merge</div>
+        <div class="feat-card-desc">Combine PDFs, PNGs and JPGs into a single PDF, instantly.</div>
       </div>
       <div class="feat-card">
         <div class="feat-card-icon">🔒</div>
-        <div class="feat-card-title">Private by default</div>
-        <div class="feat-card-desc">Files stay in your browser. Nothing is uploaded to a server.</div>
+        <div class="feat-card-title">Private by design</div>
+        <div class="feat-card-desc">Your files are processed in your browser — never uploaded to anyone's server.</div>
       </div>
+    </div>
+  </section>
+
+  <!-- ── Who uses Appendy ─────────────────────────────────────── -->
+  <section class="use-cases">
+    <div class="use-cases-head">
+      <div class="eyebrow">Made for everyone with paperwork</div>
+      <h2>Who uses Appendy?</h2>
+      <p>If you've ever had to hand in, send, or file more than one document at once — Appendy is for you.</p>
+    </div>
+    <div class="use-grid">
+
+      <div class="use-card">
+        <div class="use-icon">🎓</div>
+        <h3>Students</h3>
+        <p>Combine assignment pages, scanned handwritten work, cover sheets and references into one PDF for upload. Bundle lecture notes or past papers into a single study file.</p>
+      </div>
+
+      <div class="use-card">
+        <div class="use-icon">💼</div>
+        <h3>Finance &amp; accounting</h3>
+        <p>Merge invoices, receipts, bank statements and expense reports into one clean file for bookkeeping, audits, tax returns or reimbursement claims.</p>
+      </div>
+
+      <div class="use-card">
+        <div class="use-icon">🧳</div>
+        <h3>Job seekers</h3>
+        <p>Package your CV, cover letter, certificates and references into a single polished PDF that recruiters can open in one click.</p>
+      </div>
+
+      <div class="use-card">
+        <div class="use-icon">🏠</div>
+        <h3>Renters &amp; applicants</h3>
+        <p>Bundle ID, payslips, references and application forms for apartment, visa, loan or insurance applications — no more five-attachment emails.</p>
+      </div>
+
+      <div class="use-card">
+        <div class="use-icon">⚖️</div>
+        <h3>Legal &amp; admin</h3>
+        <p>Assemble contracts, signed pages, evidence and appendices into one ordered document for filing or sharing with clients.</p>
+      </div>
+
+      <div class="use-card">
+        <div class="use-icon">🩺</div>
+        <h3>Healthcare &amp; patients</h3>
+        <p>Collect prescriptions, lab results, referrals and medical records into a single file to share with a doctor, insurer or specialist.</p>
+      </div>
+
+      <div class="use-card">
+        <div class="use-icon">🧑‍💻</div>
+        <h3>Freelancers &amp; small business</h3>
+        <p>Turn quotes, contracts, portfolios and deliverables into tidy PDFs to send clients a professional, single-file package.</p>
+      </div>
+
+      <div class="use-card">
+        <div class="use-icon">👨‍👩‍👧</div>
+        <h3>Families &amp; everyday use</h3>
+        <p>Keep warranties, manuals, school letters, travel documents and tickets together — one file per trip, child or household task.</p>
+      </div>
+
+      <div class="use-card">
+        <div class="use-icon">📸</div>
+        <h3>Anyone with phone scans</h3>
+        <p>Snapped photos of a multi-page document? Drop the images in, reorder them, and export a proper PDF instead of a pile of pictures.</p>
+      </div>
+
+    </div>
+    <div class="use-cta">
+      <button class="btn btn-primary btn-lg" onclick="openAuth()">Start merging — it's free</button>
+      <p class="use-cta-note">Free: 2 document sets &amp; 10 MB per file · Lifetime: unlimited, one payment of CHF 9.90</p>
     </div>
   </section>
 </div>
@@ -633,7 +735,7 @@
 <div class="modal-overlay hidden" id="authModal" onclick="closeAuthOnOverlay(event)">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Welcome to DocStack</div>
+      <div class="modal-title">Welcome to Appendy</div>
       <div class="modal-subtitle">Create an account to save your document sets</div>
     </div>
     <div class="modal-body" id="authBody">
@@ -665,7 +767,7 @@
 <div class="modal-overlay hidden" id="pricingModal" onclick="closePricingOnOverlay(event)">
   <div class="modal pricing-modal">
     <div class="price-hero">
-      <div style="font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-h);margin-bottom:8px">DocStack Lifetime</div>
+      <div style="font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-h);margin-bottom:8px">Appendy Lifetime</div>
       <div class="price-amount">CHF 9.90</div>
       <div class="price-period">one-time · lifetime access</div>
     </div>
@@ -710,7 +812,7 @@
 
 <script type="module">
 /* ================================================================
-   DocStack — app logic
+   Appendy — app logic
    ================================================================ */
 
 // ── Firebase setup ───────────────────────────────────────────────
@@ -1268,7 +1370,7 @@ onAuthStateChanged(auth, (u) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cDocStack build v5 — IndexedDB storage + sticky export bar ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cAppendy build v6 — renamed + use-cases section ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
