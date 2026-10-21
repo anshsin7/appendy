@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- PDF engine: classic UMD build exposes global `PDFLib`. Loaded before app logic. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <style>
     /* ── Reset & tokens ──────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -720,7 +722,8 @@ const fbApp = initializeApp(firebaseConfig);
 const auth  = getAuth(fbApp);
 
 // ── PDF engine (pdf-lib) ─────────────────────────────────────────
-import { PDFDocument } from "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm";
+// pdf-lib is loaded via a classic <script> tag in <head> as the global `PDFLib`.
+// (Loading it this way avoids the whole module from dying if an ESM CDN hiccups.)
 
 // Convert a base64 data URL into a raw byte array for pdf-lib.
 function dataUrlToBytes(dataUrl) {
@@ -968,6 +971,12 @@ async function exportPDF() {
   const s = sets.find(s => s.id === activeSetId);
   if (!s || s.files.length === 0) { showToast('Add at least one file first', 'warn'); return; }
 
+  if (typeof PDFLib === 'undefined' || !PDFLib.PDFDocument) {
+    showToast('PDF engine still loading — try again in a moment', 'warn');
+    return;
+  }
+  const { PDFDocument } = PDFLib;
+
   const btn = document.getElementById('exportBtn');
   const originalHtml = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Combining…'; }
@@ -1190,6 +1199,7 @@ onAuthStateChanged(auth, (u) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
+console.log('%cDocStack build v4 — real PDF merge active ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
