@@ -306,9 +306,21 @@
       display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
       box-shadow: 0 8px 30px -12px #6366f150;
     }
-    .export-card-info { flex: 1; min-width: 200px; position: relative; z-index: 1; }
+    .export-card-info { flex: 1; min-width: 160px; position: relative; z-index: 1; }
     .export-card-title { font-weight: 650; font-size: .95rem; margin-bottom: 4px; }
     .export-card-meta { font-size: .8rem; color: var(--muted); }
+
+    /* Sticky export bar — pinned to bottom of the main pane, always reachable */
+    .export-bar {
+      flex-shrink: 0;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      padding: 16px 28px;
+      border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(17,17,19,.6), var(--surface));
+      backdrop-filter: blur(10px);
+      box-shadow: 0 -8px 24px -12px rgba(0,0,0,.6);
+    }
+    @media (max-width: 680px) { .export-bar { padding: 14px 16px; } .export-bar .btn { flex: 1; } }
 
     /* ── Toast ───────────────────────────────────────────────── */
     .toast-area { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
@@ -595,19 +607,20 @@
             <div class="file-list" id="fileList"></div>
           </div>
 
-          <!-- Export card -->
-          <div class="export-card" id="exportCard" style="display:none">
-            <div class="export-card-info">
-              <div class="export-card-title">Export as PDF</div>
-              <div class="export-card-meta" id="exportMeta">Combine all files into one PDF</div>
-            </div>
-            <button class="btn btn-primary" id="exportBtn" onclick="exportPDF()">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Combine &amp; download
-            </button>
-          </div>
-
         </div><!-- /main-body -->
+
+        <!-- Export bar — sticky, ALWAYS visible regardless of file count -->
+        <div class="export-bar" id="exportCard" style="display:none">
+          <div class="export-card-info">
+            <div class="export-card-title">Export as PDF</div>
+            <div class="export-card-meta" id="exportMeta">Combine all files into one PDF</div>
+          </div>
+          <button class="btn btn-primary btn-lg" id="exportBtn" onclick="exportPDF()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Combine &amp; download
+          </button>
+        </div>
+
       </div><!-- /set-detail -->
     </main>
   </div>
@@ -725,28 +738,67 @@ const auth  = getAuth(fbApp);
 // pdf-lib is loaded via a classic <script> tag in <head> as the global `PDFLib`.
 // (Loading it this way avoids the whole module from dying if an ESM CDN hiccups.)
 
-// Convert a base64 data URL into a raw byte array for pdf-lib.
-function dataUrlToBytes(dataUrl) {
-  const base64 = dataUrl.split(',')[1];
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
 // ── Constants ────────────────────────────────────────────────────
 const FREE_SET_LIMIT  = 2;
 const FREE_FILE_LIMIT = 10 * 1024 * 1024; // 10 MB per file
 const LS_USER_KEY     = 'ds_user';
-const LS_SETS_KEY     = 'ds_sets';
+const LS_SETS_KEY     = 'ds_sets';   // metadata only (names/order/file info) — tiny, safe in localStorage
 const LS_PLAN_KEY     = 'ds_plan';
 
 // ── State ────────────────────────────────────────────────────────
-let currentUser  = null;   // { email, name }
-let currentPlan  = 'free'; // 'free' | 'lifetime'
-let sets         = [];     // [{ id, name, files: [{id,name,size,type,dataUrl}] }]
+// sets   = [{ id, name, files: [{ id, name, size, type }] }]   ← metadata only
+// Actual binary file bytes live in IndexedDB, keyed by file id. This lets us
+// store hundreds of MB instead of the ~5MB localStorage cap that was silently
+// rejecting heavier files.
+let currentUser  = null;
+let currentPlan  = 'free';
+let sets         = [];
 let activeSetId  = null;
 let dragSrcIdx   = null;
+
+// ── IndexedDB blob store ──────────────────────────────────────────
+let _dbPromise = null;
+function db() {
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open('docstack-files', 1);
+    req.onupgradeneeded = () => {
+      const d = req.result;
+      if (!d.objectStoreNames.contains('blobs')) d.createObjectStore('blobs');
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return _dbPromise;
+}
+async function blobPut(id, arrayBuffer) {
+  const d = await db();
+  return new Promise((resolve, reject) => {
+    const tx = d.transaction('blobs', 'readwrite');
+    tx.objectStore('blobs').put(arrayBuffer, id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('storage quota exceeded'));
+  });
+}
+async function blobGet(id) {
+  const d = await db();
+  return new Promise((resolve, reject) => {
+    const tx = d.transaction('blobs', 'readonly');
+    const r = tx.objectStore('blobs').get(id);
+    r.onsuccess = () => resolve(r.result || null);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function blobDelete(id) {
+  const d = await db();
+  return new Promise((resolve) => {
+    const tx = d.transaction('blobs', 'readwrite');
+    tx.objectStore('blobs').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
 
 // ── Init ─────────────────────────────────────────────────────────
 function init() {
@@ -756,7 +808,7 @@ function init() {
   if (savedUser) {
     currentUser = JSON.parse(savedUser);
     currentPlan = savedPlan || 'free';
-    sets = savedSets ? JSON.parse(savedSets) : [];
+    try { sets = savedSets ? JSON.parse(savedSets) : []; } catch { sets = []; }
     showApp();
   }
   // Check URL param for Stripe success
@@ -899,9 +951,11 @@ function createSet() {
   setTimeout(() => document.getElementById('setNameInput').select(), 50);
 }
 
-function deleteCurrentSet() {
+async function deleteCurrentSet() {
   if (!activeSetId) return;
   if (!confirm('Delete this document set and all its files?')) return;
+  const s = sets.find(s => s.id === activeSetId);
+  if (s) { for (const f of s.files) await blobDelete(f.id); }
   sets = sets.filter(s => s.id !== activeSetId);
   activeSetId = null;
   saveSets();
@@ -939,30 +993,44 @@ function handleDrop(e) {
 }
 function handleFileInput(e) { addFiles([...e.target.files]); e.target.value = ''; }
 
-function addFiles(files) {
+async function addFiles(files) {
   const s = sets.find(s => s.id === activeSetId);
   if (!s) return;
-  files.forEach(file => {
-    if (!file.type.match(/pdf|png|jpeg/)) { showToast(`${file.name}: unsupported type`, 'error'); return; }
+  let added = 0;
+  for (const file of files) {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImg = file.type === 'image/png' || file.type === 'image/jpeg';
+    if (!isPdf && !isImg) { showToast(`${file.name}: unsupported type (PDF, PNG, JPG only)`, 'error'); continue; }
     if (!isLifetime() && file.size > FREE_FILE_LIMIT) {
-      showToast(`${file.name} exceeds the 10 MB free limit`, 'warn');
-      return;
+      showToast(`${file.name} is over the 10 MB free limit — upgrade for larger files`, 'warn');
+      continue;
     }
-    const reader = new FileReader();
-    reader.onload = ev => {
-      s.files.push({ id: 'f_'+Date.now()+Math.random(), name: file.name, size: file.size, type: file.type, dataUrl: ev.target.result });
-      saveSets();
-      renderSetDetail();
-    };
-    reader.readAsDataURL(file);
-  });
+    try {
+      const buffer = await file.arrayBuffer();           // raw binary, no base64 bloat
+      const id = 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      await blobPut(id, buffer);                          // store bytes in IndexedDB
+      s.files.push({ id, name: file.name, size: file.size, type: isPdf ? 'application/pdf' : file.type });
+      added++;
+    } catch (err) {
+      console.error(err);
+      showToast(`Couldn't store ${file.name} — browser storage may be full`, 'error');
+    }
+  }
+  if (added) {
+    saveSets();
+    renderSidebar();
+    renderSetDetail();
+    showToast(`${added} file${added !== 1 ? 's' : ''} added`, 'success');
+  }
 }
 
-function removeFile(fileId) {
+async function removeFile(fileId) {
   const s = sets.find(s => s.id === activeSetId);
   if (!s) return;
   s.files = s.files.filter(f => f.id !== fileId);
+  await blobDelete(fileId);
   saveSets();
+  renderSidebar();
   renderSetDetail();
 }
 
@@ -985,10 +1053,11 @@ async function exportPDF() {
     const merged = await PDFDocument.create();
 
     for (const f of s.files) {
-      const bytes = dataUrlToBytes(f.dataUrl);
+      const buffer = await blobGet(f.id);                 // pull bytes from IndexedDB
+      if (!buffer) { showToast(`Skipping ${f.name} — data missing`, 'warn'); continue; }
+      const bytes = new Uint8Array(buffer);
 
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
-        // Copy every page from the source PDF into the merged doc.
         const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
         const pages = await merged.copyPages(src, src.getPageIndices());
         pages.forEach(p => merged.addPage(p));
@@ -1199,7 +1268,7 @@ onAuthStateChanged(auth, (u) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cDocStack build v4 — real PDF merge active ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cDocStack build v5 — IndexedDB storage + sticky export bar ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
