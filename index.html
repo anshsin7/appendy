@@ -1175,8 +1175,15 @@ function handleDrop(e) {
 function handleFileInput(e) { addFiles([...e.target.files]); e.target.value = ''; }
 
 async function addFiles(files) {
-  const s = sets.find(s => s.id === activeSetId);
-  if (!s) return;
+  // If no set is active, auto-create one so files always have a home.
+  let s = sets.find(s => s.id === activeSetId);
+  if (!s) {
+    const id = 'set_' + Date.now();
+    s = { id, name: 'Untitled set 1', files: [] };
+    sets.push(s);
+    activeSetId = id;
+    selectSet(id);
+  }
   let added = 0;
   for (const file of files) {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
@@ -1189,20 +1196,27 @@ async function addFiles(files) {
     try {
       const buffer = await file.arrayBuffer();           // raw binary, no base64 bloat
       const id = 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-      try { await blobPut(id, buffer); } catch {}         // local cache (best effort)
-      await cloudSaveFile(id, buffer);                    // durable cloud copy
+      try { await blobPut(id, buffer); } catch (e) { console.warn('local cache failed', e); }
+      await cloudSaveFile(id, buffer);                    // durable cloud copy (best effort)
       s.files.push({ id, name: file.name, size: file.size, type: isPdf ? 'application/pdf' : file.type });
       added++;
     } catch (err) {
-      console.error(err);
-      showToast(`Couldn't upload ${file.name} — check your connection`, 'error');
+      console.error('addFiles error:', err);
+      showToast(`Couldn't add ${file.name}: ${err.message || err}`, 'error');
     }
   }
   if (added) {
-    saveSets();
-    renderSidebar();
-    renderSetDetail();
+    try { saveSets(); } catch (e) { console.warn('saveSets failed', e); }
+    try {
+      renderSidebar();
+      renderSetDetail();
+    } catch (e) {
+      console.error('render error:', e);
+      showToast('Render failed: ' + (e.message || e), 'error');
+    }
     showToast(`${added} file${added !== 1 ? 's' : ''} added`, 'success');
+  } else {
+    showToast('No files were added — check the format (PDF/PNG/JPG) and size', 'warn');
   }
 }
 
@@ -1461,8 +1475,17 @@ onAuthStateChanged(auth, (u) => {
   }
 });
 
+// ── Surface any uncaught error on-screen (user can't easily read console) ──
+window.addEventListener('error', (e) => {
+  try { showToast('Error: ' + (e.message || 'unknown'), 'error'); } catch {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason || {};
+  try { showToast('Error: ' + (r.message || r.code || 'background task failed'), 'error'); } catch {}
+});
+
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cAppendy build v8 — graceful Storage fallback (works with or without Blaze) ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cAppendy build v9 — auto-create set + visible error reporting ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
