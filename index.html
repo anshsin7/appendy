@@ -532,7 +532,9 @@
 
       <div id="emailStep">
         <label class="label" for="authEmail">Email address</label>
-        <input class="input" type="email" id="authEmail" placeholder="you@example.com" onkeydown="if(event.key==='Enter')submitEmail()" />
+        <input class="input" type="email" id="authEmail" placeholder="you@example.com" style="margin-bottom:10px" />
+        <label class="label" for="authPassword">Password</label>
+        <input class="input" type="password" id="authPassword" placeholder="At least 6 characters" onkeydown="if(event.key==='Enter')submitEmail()" />
       </div>
     </div>
     <div class="modal-footer" id="authFooter">
@@ -592,10 +594,31 @@
   </div>
 </div>
 
-<script>
+<script type="module">
 /* ================================================================
    DocStack — app logic
    ================================================================ */
+
+// ── Firebase setup ───────────────────────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  signOut as fbSignOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD-wZASis6SkwzSM-RlS182ZCTL7ELd_5w",
+  authDomain: "appendy-3390a.firebaseapp.com",
+  projectId: "appendy-3390a",
+  storageBucket: "appendy-3390a.firebasestorage.app",
+  messagingSenderId: "516750449808",
+  appId: "1:516750449808:web:09835a49610a2c66264c15",
+  measurementId: "G-3JBZNQ4EYQ"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth  = getAuth(fbApp);
 
 // ── Constants ────────────────────────────────────────────────────
 const FREE_SET_LIMIT  = 2;
@@ -636,18 +659,46 @@ function openAuth() { document.getElementById('authModal').classList.remove('hid
 function closeAuth() { document.getElementById('authModal').classList.add('hidden'); }
 function closeAuthOnOverlay(e) { if (e.target === e.currentTarget) closeAuth(); }
 
-function signInWithGoogle() {
-  // ⚠️  Wire up Firebase / Supabase Google OAuth here.
-  // For prototype: simulate with a fake Google account.
-  finishSignIn({ email: 'user@gmail.com', name: 'You' });
+async function signInWithGoogle() {
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    const u = result.user;
+    finishSignIn({ email: u.email, name: u.displayName || (u.email ? u.email.split('@')[0] : 'You'), uid: u.uid });
+  } catch (err) {
+    if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
+    showToast('Google sign-in failed: ' + (err.message || err.code), 'error');
+  }
 }
 
-function submitEmail() {
-  const email = document.getElementById('authEmail').value.trim();
+async function submitEmail() {
+  const emailEl = document.getElementById('authEmail');
+  const email = emailEl.value.trim();
+  const password = document.getElementById('authPassword').value;
   if (!email || !email.includes('@')) { showToast('Enter a valid email address', 'error'); return; }
-  // ⚠️  Send magic link / create user record here (Firebase Auth, Supabase, etc.)
-  // For prototype: treat any email as valid sign-in.
-  finishSignIn({ email, name: email.split('@')[0] });
+  if (!password || password.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+  try {
+    // Try to create a new account; if the email already exists, sign in instead.
+    let cred;
+    try {
+      cred = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (e) {
+      if (e.code === 'auth/email-already-in-use') {
+        cred = await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        throw e;
+      }
+    }
+    const u = cred.user;
+    finishSignIn({ email: u.email, name: u.email.split('@')[0], uid: u.uid });
+  } catch (err) {
+    const map = {
+      'auth/wrong-password': 'Wrong password for this email.',
+      'auth/invalid-credential': 'Wrong email or password.',
+      'auth/invalid-email': 'That email address looks invalid.',
+    };
+    showToast(map[err.code] || ('Sign-in failed: ' + (err.message || err.code)), 'error');
+  }
 }
 
 function finishSignIn(user) {
@@ -659,6 +710,7 @@ function finishSignIn(user) {
 }
 
 function signOut() {
+  fbSignOut(auth).catch(() => {});
   localStorage.removeItem(LS_USER_KEY);
   localStorage.removeItem(LS_PLAN_KEY);
   currentUser = null; currentPlan = 'free'; sets = []; activeSetId = null;
@@ -950,6 +1002,24 @@ function showToast(msg, type = 'info') {
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Expose functions for inline onclick handlers (required for type="module") ──
+Object.assign(window, {
+  openAuth, closeAuth, closeAuthOnOverlay,
+  signInWithGoogle, submitEmail, signOut,
+  openPricing, closePricing, closePricingOnOverlay,
+  openGate, closeGate, closeGateOnOverlay,
+  createSet, deleteCurrentSet, selectSet,
+  triggerFilePicker, handleDragOver, handleDragLeave, handleDrop, handleFileInput,
+  removeFile, exportPDF,
+});
+
+// ── Keep users signed in across page reloads (Firebase session) ──
+onAuthStateChanged(auth, (u) => {
+  if (u && !currentUser) {
+    finishSignIn({ email: u.email, name: u.displayName || (u.email ? u.email.split('@')[0] : 'You'), uid: u.uid });
+  }
+});
 
 // ── Boot ──────────────────────────────────────────────────────────
 init();
