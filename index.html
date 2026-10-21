@@ -687,7 +687,7 @@
           <!-- Storage warning -->
           <div class="alert alert-warn" id="storageAlert">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            <span><strong>Browser storage only</strong> — Files are saved in this browser. Clearing site data, using private/incognito mode, switching browsers or devices, or hitting storage limits will permanently remove them. <strong>Export your PDFs and keep a backup.</strong></span>
+            <span><strong>Saved to your account</strong> — Your files sync to your Appendy account so you can reach them from any device after signing in. We still recommend keeping your own backup of important documents.</span>
           </div>
 
           <!-- Drop zone -->
@@ -781,7 +781,7 @@
     <div style="padding:0 24px">
       <div class="alert alert-info" style="margin-bottom:16px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        Free tier: 2 document sets · 10 MB per file · local storage only
+        Free tier: 2 document sets · 10 MB per file · synced to your account
       </div>
     </div>
     <div style="padding:0 24px 24px;display:flex;flex-direction:column;gap:10px">
@@ -820,8 +820,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebas
 import {
   getAuth, GoogleAuthProvider, signInWithPopup,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut as fbSignOut, onAuthStateChanged
+  signOut as fbSignOut, onAuthStateChanged,
+  setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+import {
+  getStorage, ref as storageRef, uploadBytes, getBytes, deleteObject
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD-wZASis6SkwzSM-RlS182ZCTL7ELd_5w",
@@ -835,6 +842,11 @@ const firebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const auth  = getAuth(fbApp);
+const fsdb  = getFirestore(fbApp);
+const fstor = getStorage(fbApp);
+
+// Keep users signed in across tabs/reloads/devices (persists the session).
+setPersistence(auth, browserLocalPersistence).catch(() => {});
 
 // ── PDF engine (pdf-lib) ─────────────────────────────────────────
 // pdf-lib is loaded via a classic <script> tag in <head> as the global `PDFLib`.
@@ -902,18 +914,64 @@ async function blobDelete(id) {
   });
 }
 
+// ── Cloud sync (Firebase Storage + Firestore) ─────────────────────
+// Files live in Storage at users/{uid}/{fileId}; IndexedDB is a local cache.
+// Set metadata + plan live in a single Firestore doc users/{uid}.
+function uid() { return currentUser && currentUser.uid; }
+
+async function cloudSaveFile(fileId, arrayBuffer) {
+  if (!uid()) return;
+  const r = storageRef(fstor, `users/${uid()}/${fileId}`);
+  await uploadBytes(r, arrayBuffer);
+}
+async function cloudGetFile(fileId) {
+  if (!uid()) return null;
+  const r = storageRef(fstor, `users/${uid()}/${fileId}`);
+  return await getBytes(r); // ArrayBuffer
+}
+async function cloudDeleteFile(fileId) {
+  if (!uid()) return;
+  try { await deleteObject(storageRef(fstor, `users/${uid()}/${fileId}`)); } catch {}
+}
+async function cloudSaveMeta() {
+  if (!uid()) return;
+  try {
+    await setDoc(doc(fsdb, 'users', uid()), {
+      email: currentUser.email || '',
+      plan: currentPlan,
+      sets: sets,                 // metadata only (ids/names/order/file info)
+      updatedAt: Date.now(),
+    }, { merge: true });
+  } catch (e) { console.warn('cloud meta save failed', e); }
+}
+async function cloudLoadMeta() {
+  if (!uid()) return;
+  try {
+    const snap = await getDoc(doc(fsdb, 'users', uid()));
+    if (snap.exists()) {
+      const d = snap.data();
+      currentPlan = d.plan || 'free';
+      sets = Array.isArray(d.sets) ? d.sets : [];
+    } else {
+      // First login — seed an empty cloud profile so email is captured.
+      await cloudSaveMeta();
+    }
+  } catch (e) { console.warn('cloud meta load failed', e); }
+}
+// Get file bytes: try local cache first, else pull from cloud and cache it.
+async function getFileBytes(fileId) {
+  let buf = await blobGet(fileId);
+  if (buf) return buf;
+  buf = await cloudGetFile(fileId);
+  if (buf) { try { await blobPut(fileId, buf); } catch {} }
+  return buf;
+}
+
 // ── Init ─────────────────────────────────────────────────────────
+// Firebase (onAuthStateChanged, below) is the source of truth for who is
+// signed in. It fires on load and restores the session across devices.
 function init() {
-  const savedUser = localStorage.getItem(LS_USER_KEY);
-  const savedPlan = localStorage.getItem(LS_PLAN_KEY);
-  const savedSets = localStorage.getItem(LS_SETS_KEY);
-  if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    currentPlan = savedPlan || 'free';
-    try { sets = savedSets ? JSON.parse(savedSets) : []; } catch { sets = []; }
-    showApp();
-  }
-  // Check URL param for Stripe success
+  // Stripe success: flip plan to lifetime and persist to the cloud profile.
   const params = new URLSearchParams(location.search);
   if (params.get('upgraded') === '1') {
     activatePlan('lifetime');
@@ -930,9 +988,8 @@ function closeAuthOnOverlay(e) { if (e.target === e.currentTarget) closeAuth(); 
 async function signInWithGoogle() {
   try {
     const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-    const u = result.user;
-    finishSignIn({ email: u.email, name: u.displayName || (u.email ? u.email.split('@')[0] : 'You'), uid: u.uid });
+    await signInWithPopup(auth, provider);
+    // onAuthStateChanged handles the rest (loads cloud profile + files).
   } catch (err) {
     if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
     showToast('Google sign-in failed: ' + (err.message || err.code), 'error');
@@ -957,30 +1014,34 @@ async function submitEmail() {
         throw e;
       }
     }
-    const u = cred.user;
-    finishSignIn({ email: u.email, name: u.email.split('@')[0], uid: u.uid });
+    // onAuthStateChanged handles loading the account.
+    void cred;
   } catch (err) {
     const map = {
       'auth/wrong-password': 'Wrong password for this email.',
       'auth/invalid-credential': 'Wrong email or password.',
       'auth/invalid-email': 'That email address looks invalid.',
+      'auth/weak-password': 'Password must be at least 6 characters.',
     };
     showToast(map[err.code] || ('Sign-in failed: ' + (err.message || err.code)), 'error');
   }
 }
 
-function finishSignIn(user) {
+// Called by onAuthStateChanged whenever a user is present (login OR page reload).
+async function finishSignIn(user) {
   currentUser = user;
-  localStorage.setItem(LS_USER_KEY, JSON.stringify(user));
   closeAuth();
-  showApp();
+  showApp();                         // show shell immediately
   showToast(`Signed in as ${user.email}`, 'success');
+  await cloudLoadMeta();             // pull plan + set metadata from Firestore
+  updateNavUser();
+  renderSidebar();
+  renderSidebarFooter();
+  if (sets.length > 0) selectSet(sets[0].id);
 }
 
 function signOut() {
   fbSignOut(auth).catch(() => {});
-  localStorage.removeItem(LS_USER_KEY);
-  localStorage.removeItem(LS_PLAN_KEY);
   currentUser = null; currentPlan = 'free'; sets = []; activeSetId = null;
   document.getElementById('appView').classList.add('hidden');
   document.getElementById('landingView').classList.remove('hidden');
@@ -1002,7 +1063,7 @@ function showApp() {
 // ── Plan ─────────────────────────────────────────────────────────
 function activatePlan(plan) {
   currentPlan = plan;
-  localStorage.setItem(LS_PLAN_KEY, plan);
+  cloudSaveMeta();               // persist plan to the user's cloud profile
   updateNavUser();
   renderSidebar();
   renderSidebarFooter();
@@ -1017,7 +1078,7 @@ function updateNavUser() {
   badge.className = 'badge ' + (isLifetime() ? 'badge-pro' : 'badge-free');
   upgradeBtn.classList.toggle('hidden', isLifetime());
   const av = document.getElementById('userAvatar');
-  av.textContent = currentUser ? currentUser.name.charAt(0).toUpperCase() : '?';
+  av.textContent = currentUser && currentUser.name ? currentUser.name.charAt(0).toUpperCase() : '?';
 }
 
 // ── Pricing ──────────────────────────────────────────────────────
@@ -1034,7 +1095,10 @@ function closeGate() { document.getElementById('gateModal').classList.add('hidde
 function closeGateOnOverlay(e) { if (e.target === e.currentTarget) closeGate(); }
 
 // ── Sets ─────────────────────────────────────────────────────────
-function saveSets() { localStorage.setItem(LS_SETS_KEY, JSON.stringify(sets)); }
+function saveSets() {
+  localStorage.setItem(LS_SETS_KEY, JSON.stringify(sets)); // fast local cache
+  cloudSaveMeta();                                          // durable cloud copy
+}
 
 function createSet() {
   if (!isLifetime() && sets.length >= FREE_SET_LIMIT) {
@@ -1057,7 +1121,7 @@ async function deleteCurrentSet() {
   if (!activeSetId) return;
   if (!confirm('Delete this document set and all its files?')) return;
   const s = sets.find(s => s.id === activeSetId);
-  if (s) { for (const f of s.files) await blobDelete(f.id); }
+  if (s) { for (const f of s.files) { await blobDelete(f.id); await cloudDeleteFile(f.id); } }
   sets = sets.filter(s => s.id !== activeSetId);
   activeSetId = null;
   saveSets();
@@ -1110,12 +1174,13 @@ async function addFiles(files) {
     try {
       const buffer = await file.arrayBuffer();           // raw binary, no base64 bloat
       const id = 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-      await blobPut(id, buffer);                          // store bytes in IndexedDB
+      try { await blobPut(id, buffer); } catch {}         // local cache (best effort)
+      await cloudSaveFile(id, buffer);                    // durable cloud copy
       s.files.push({ id, name: file.name, size: file.size, type: isPdf ? 'application/pdf' : file.type });
       added++;
     } catch (err) {
       console.error(err);
-      showToast(`Couldn't store ${file.name} — browser storage may be full`, 'error');
+      showToast(`Couldn't upload ${file.name} — check your connection`, 'error');
     }
   }
   if (added) {
@@ -1131,6 +1196,7 @@ async function removeFile(fileId) {
   if (!s) return;
   s.files = s.files.filter(f => f.id !== fileId);
   await blobDelete(fileId);
+  await cloudDeleteFile(fileId);
   saveSets();
   renderSidebar();
   renderSetDetail();
@@ -1155,7 +1221,7 @@ async function exportPDF() {
     const merged = await PDFDocument.create();
 
     for (const f of s.files) {
-      const buffer = await blobGet(f.id);                 // pull bytes from IndexedDB
+      const buffer = await getFileBytes(f.id);            // local cache, else cloud
       if (!buffer) { showToast(`Skipping ${f.name} — data missing`, 'warn'); continue; }
       const bytes = new Uint8Array(buffer);
 
@@ -1362,15 +1428,19 @@ Object.assign(window, {
   removeFile, exportPDF,
 });
 
-// ── Keep users signed in across page reloads (Firebase session) ──
+// ── Single source of truth for auth: restores session on every load,
+//    across tabs and devices, and loads the user's cloud data. ──
 onAuthStateChanged(auth, (u) => {
   if (u && !currentUser) {
     finishSignIn({ email: u.email, name: u.displayName || (u.email ? u.email.split('@')[0] : 'You'), uid: u.uid });
+  } else if (!u && currentUser) {
+    // Signed out in another tab — reflect it here.
+    signOut();
   }
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cAppendy build v6 — renamed + use-cases section ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cAppendy build v7 — cloud sync (Firebase Storage + Firestore) ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
