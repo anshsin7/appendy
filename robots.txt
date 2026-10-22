@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://anshsin7-appendy.vercel.app/sitemap.xml

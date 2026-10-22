@@ -3,8 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Appendy – Merge PDFs &amp; images into one clean file</title>
-  <meta name="description" content="Appendy combines your PDFs, scans and photos into a single ordered PDF. Free to start, pay once for unlimited. For students, finance, job seekers and everyone with paperwork." />
+
+  <!-- ── Primary SEO ─────────────────────────────────────────── -->
+  <title>Appendy – Merge PDFs &amp; Images Into One PDF (Free)</title>
+  <meta name="description" content="Combine PDFs, scans and photos into one clean, ordered PDF — free online. Drag to reorder, merge in your browser, no upload to servers. For students, finance, job seekers and more." />
+  <meta name="keywords" content="merge pdf, combine pdf, pdf merger, join pdf files, merge pdf free, combine pdf and images, pdf combiner online, merge documents" />
+  <meta name="author" content="Appendy" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://anshsin7-appendy.vercel.app/" />
+  <meta name="theme-color" content="#6366f1" />
+
+  <!-- ── Open Graph (Facebook / LinkedIn / WhatsApp) ─────────── -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Appendy" />
+  <meta property="og:title" content="Appendy – Merge PDFs &amp; Images Into One PDF" />
+  <meta property="og:description" content="Combine PDFs, scans and photos into one clean, ordered PDF — free online. Private, browser-based, no subscription." />
+  <meta property="og:url" content="https://anshsin7-appendy.vercel.app/" />
+  <meta property="og:image" content="https://anshsin7-appendy.vercel.app/og-image.png" />
+
+  <!-- ── Twitter / X card ────────────────────────────────────── -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Appendy – Merge PDFs &amp; Images Into One PDF" />
+  <meta name="twitter:description" content="Combine PDFs, scans and photos into one clean, ordered PDF — free online. Private, browser-based, no subscription." />
+  <meta name="twitter:image" content="https://anshsin7-appendy.vercel.app/og-image.png" />
+
+  <!-- ── Inline SVG favicon (no extra file needed) ───────────── -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%236366f1'/%3E%3Cg fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='6' height='7' rx='1'/%3E%3Crect x='14' y='4' width='6' height='4' rx='1'/%3E%3Crect x='14' y='11' width='6' height='9' rx='1'/%3E%3Crect x='4' y='14' width='6' height='6' rx='1'/%3E%3C/g%3E%3C/svg%3E" />
+
+  <!-- ── Structured data: helps Google show it as a web app ──── -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Appendy",
+    "url": "https://anshsin7-appendy.vercel.app/",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Any (web browser)",
+    "description": "Merge PDFs, scans and photos into a single ordered PDF, directly in your browser.",
+    "offers": [
+      { "@type": "Offer", "price": "0", "priceCurrency": "CHF", "name": "Free" },
+      { "@type": "Offer", "price": "9.90", "priceCurrency": "CHF", "name": "Lifetime" }
+    ]
+  }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -446,6 +488,41 @@
     .use-card p { font-size: .875rem; color: var(--muted); line-height: 1.6; }
     .use-cta { text-align: center; margin-top: 48px; }
     .use-cta-note { margin-top: 14px; font-size: .82rem; color: var(--muted); }
+
+    /* ── FAQ ─────────────────────────────────────────────────── */
+    .faq { max-width: 740px; margin: 0 auto; padding: 24px 20px 80px; }
+    .faq-list { display: flex; flex-direction: column; gap: 10px; }
+    .faq-item {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 2px 18px; transition: border-color .2s;
+    }
+    .faq-item[open] { border-color: #6366f140; }
+    .faq-item summary {
+      cursor: pointer; font-weight: 600; font-size: .95rem; padding: 14px 0;
+      list-style: none; display: flex; justify-content: space-between; align-items: center;
+    }
+    .faq-item summary::-webkit-details-marker { display: none; }
+    .faq-item summary::after { content: '+'; color: var(--accent-h); font-size: 1.3rem; font-weight: 400; transition: transform .2s; }
+    .faq-item[open] summary::after { transform: rotate(45deg); }
+    .faq-item p { padding: 0 0 16px; color: var(--muted); font-size: .88rem; line-height: 1.6; }
+    .faq-item a { color: var(--accent-h); }
+
+    /* ── Site footer ─────────────────────────────────────────── */
+    .site-footer { border-top: 1px solid var(--border); background: var(--surface); }
+    .site-footer-inner {
+      max-width: 1040px; margin: 0 auto; padding: 36px 24px 20px;
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; flex-wrap: wrap;
+    }
+    .site-footer-brand { display: flex; flex-direction: column; gap: 4px; }
+    .site-footer-brand strong { font-size: 1.05rem; }
+    .site-footer-brand span { font-size: .85rem; color: var(--muted); }
+    .site-footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
+    .site-footer-links a { color: var(--muted); text-decoration: none; font-size: .85rem; }
+    .site-footer-links a:hover { color: var(--text); }
+    .site-footer-copy {
+      max-width: 1040px; margin: 0 auto; padding: 14px 24px 28px;
+      border-top: 1px solid var(--border); color: var(--muted2); font-size: .78rem;
+    }
     .landing > * { animation: fadeUp .6s ease backwards; }
     .landing-badge { animation-delay: .05s; }
     .landing h1 { animation-delay: .12s; }
@@ -638,6 +715,56 @@
       <p class="use-cta-note">Free: 2 document sets &amp; 10 MB per file · Lifetime: unlimited, one payment of CHF 9.90</p>
     </div>
   </section>
+
+  <!-- ── FAQ (SEO + trust) ────────────────────────────────────── -->
+  <section class="faq">
+    <div class="use-cases-head">
+      <div class="eyebrow">Questions</div>
+      <h2>Frequently asked</h2>
+    </div>
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary>Is Appendy free to use?</summary>
+        <p>Yes. The Free plan lets you create up to 2 document sets with files up to 10 MB each, and you can merge and download PDFs. Lifetime access (one payment of CHF 9.90) removes those limits forever.</p>
+      </details>
+      <details class="faq-item">
+        <summary>How do I merge PDFs with Appendy?</summary>
+        <p>Sign in, create a document set, drag in your PDFs and images, reorder them however you like, then click “Combine &amp; download” to get a single merged PDF.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Are my files safe and private?</summary>
+        <p>Your files are processed in your browser and are only stored in your own private account space. They are never shared with other users or sold. See our <a href="/privacy.html">Privacy Policy</a>.</p>
+      </details>
+      <details class="faq-item">
+        <summary>What file types are supported?</summary>
+        <p>PDF, PNG and JPG. Images are automatically placed on their own page when merged.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Is the Lifetime plan really a one-time payment?</summary>
+        <p>Yes — CHF 9.90 once, no subscription, no recurring charges. It unlocks unlimited document sets and removes the file-size limit.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Can I get a refund?</summary>
+        <p>Yes. We offer a 14-day money-back guarantee on Lifetime purchases. See our <a href="/refund.html">Refund Policy</a>.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- ── Footer ───────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div class="site-footer-brand">
+        <strong>Appendy</strong>
+        <span>Merge PDFs &amp; images into one clean file.</span>
+      </div>
+      <nav class="site-footer-links">
+        <a href="/privacy.html">Privacy Policy</a>
+        <a href="/terms.html">Terms of Service</a>
+        <a href="/refund.html">Refund Policy</a>
+      </nav>
+    </div>
+    <div class="site-footer-copy">© 2026 Appendy. All rights reserved.</div>
+  </footer>
 </div>
 
 <!-- ── App shell (signed in) ───────────────────────────────────── -->
@@ -756,7 +883,7 @@
     <div class="modal-footer" id="authFooter">
       <button class="btn btn-primary" onclick="submitEmail()" style="width:100%">Continue with email</button>
       <p style="font-size:.72rem;color:var(--muted);text-align:center;line-height:1.5">
-        By continuing you agree to our <a href="#" style="color:var(--muted)">Terms</a> and <a href="#" style="color:var(--muted)">Privacy Policy</a>.<br/>
+        By continuing you agree to our <a href="/terms.html" target="_blank" style="color:var(--muted)">Terms</a> and <a href="/privacy.html" target="_blank" style="color:var(--muted)">Privacy Policy</a>.<br/>
         We collect your email to manage your account.
       </p>
     </div>
@@ -1501,7 +1628,7 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cAppendy build v10 — robust post-payment unlock (applies after sign-in) ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cAppendy build v11 — legal pages, SEO, FAQ + footer ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
