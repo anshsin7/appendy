@@ -52,6 +52,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <!-- PDF engine: classic UMD build exposes global `PDFLib`. Loaded before app logic. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <!-- PDF.js (legacy UMD build): renders PDF pages to a canvas for in-app previews. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    // Point PDF.js at its worker (required for rendering).
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
   <style>
     /* ── Reset & tokens ──────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -337,8 +346,35 @@
     .file-size { font-size: .75rem; color: var(--muted); }
     .file-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .1s; }
     .file-row:hover .file-actions { opacity: 1; }
+    @media (hover: none) { .file-actions { opacity: 1; } } /* always show on touch devices */
+    .file-details { cursor: pointer; }
 
     .drag-handle { color: var(--muted2); cursor: grab; padding: 0 2px; }
+
+    /* ── File preview modal ──────────────────────────────────── */
+    .preview-box {
+      width: 100%; max-width: 860px; height: 88vh; display: flex; flex-direction: column;
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg);
+      animation: modalIn .25s cubic-bezier(.16,1,.3,1);
+    }
+    .preview-head {
+      display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .preview-title { font-weight: 650; font-size: .95rem; flex: 1; }
+    .preview-body { flex: 1; overflow-y: auto; background: #06060a; padding: 20px; }
+    .preview-loading {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      color: var(--muted); height: 100%; font-size: .9rem;
+    }
+    .preview-pages { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .preview-pages canvas, .preview-pages img {
+      max-width: 100%; height: auto; border-radius: 6px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.5); background: #fff;
+    }
+    .preview-pagenum { color: var(--muted2); font-size: .72rem; }
+    @media (max-width: 680px) { .preview-box { height: 92vh; max-width: 100%; } .preview-body { padding: 12px; } }
 
     /* ── Export card ─────────────────────────────────────────── */
     .export-card {
@@ -862,7 +898,7 @@
           <div id="fileListSection" class="hidden">
             <div class="file-list-header">
               <span class="file-list-title">Files</span>
-              <span class="muted" style="font-size:.75rem;color:var(--muted);margin-left:auto">Drag rows to reorder</span>
+              <span class="muted" style="font-size:.75rem;color:var(--muted);margin-left:auto">Click a file to preview · drag to reorder</span>
             </div>
             <div class="file-list" id="fileList"></div>
           </div>
@@ -888,6 +924,22 @@
 
 <!-- ── Toast area ───────────────────────────────────────────────── -->
 <div class="toast-area" id="toastArea"></div>
+
+<!-- ── File preview modal ───────────────────────────────────────── -->
+<div class="modal-overlay hidden" id="previewModal" onclick="closePreviewOnOverlay(event)">
+  <div class="preview-box">
+    <div class="preview-head">
+      <div class="preview-title truncate" id="previewTitle">Preview</div>
+      <button class="btn-icon" onclick="closePreview()" title="Close preview" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="preview-body" id="previewBody">
+      <div class="preview-loading" id="previewLoading"><span class="spinner"></span> Loading preview…</div>
+      <div class="preview-pages" id="previewPages"></div>
+    </div>
+  </div>
+</div>
 
 <!-- ── Auth modal ───────────────────────────────────────────────── -->
 <div class="modal-overlay hidden" id="authModal" onclick="closeAuthOnOverlay(event)">
@@ -1496,6 +1548,80 @@ function addImagePage(doc, img) {
   page.drawImage(img, { x: (A4.w - w) / 2, y: (A4.h - h) / 2, width: w, height: h });
 }
 
+// ── File preview ──────────────────────────────────────────────────
+let previewToken = 0; // guards against overlapping/stale preview renders
+
+function closePreview() {
+  previewToken++; // cancel any in-flight render
+  document.getElementById('previewModal').classList.add('hidden');
+  document.getElementById('previewPages').innerHTML = '';
+}
+function closePreviewOnOverlay(e) { if (e.target === e.currentTarget) closePreview(); }
+
+async function previewFile(fileId) {
+  const s = sets.find(s => s.id === activeSetId);
+  const f = s && s.files.find(x => x.id === fileId);
+  if (!f) return;
+
+  const token = ++previewToken;
+  const modal   = document.getElementById('previewModal');
+  const title   = document.getElementById('previewTitle');
+  const loading = document.getElementById('previewLoading');
+  const pages   = document.getElementById('previewPages');
+
+  title.textContent = f.name;
+  pages.innerHTML = '';
+  loading.style.display = 'flex';
+  modal.classList.remove('hidden');
+
+  try {
+    const buffer = await getFileBytes(fileId);
+    if (token !== previewToken) return;          // user closed / opened another
+    if (!buffer) throw new Error('file data not found');
+
+    if (f.type.startsWith('image')) {
+      // Simple image preview.
+      const blob = new Blob([buffer], { type: f.type });
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(blob);
+      img.onload = () => setTimeout(() => URL.revokeObjectURL(img.src), 1000);
+      pages.appendChild(img);
+    } else {
+      // Render each PDF page to a canvas with PDF.js.
+      if (!window.pdfjsLib) throw new Error('PDF viewer still loading — try again');
+      const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+      if (token !== previewToken) return;
+      const maxPages = Math.min(pdf.numPages, 30); // cap for performance
+      for (let n = 1; n <= maxPages; n++) {
+        if (token !== previewToken) return;
+        const page = await pdf.getPage(n);
+        const viewport = page.getViewport({ scale: 1.4 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        if (token !== previewToken) return;
+        pages.appendChild(canvas);
+        const label = document.createElement('div');
+        label.className = 'preview-pagenum';
+        label.textContent = `Page ${n} of ${pdf.numPages}`;
+        pages.appendChild(label);
+      }
+      if (pdf.numPages > maxPages) {
+        const more = document.createElement('div');
+        more.className = 'preview-pagenum';
+        more.textContent = `… ${pdf.numPages - maxPages} more page(s) not shown in preview`;
+        pages.appendChild(more);
+      }
+    }
+  } catch (err) {
+    console.error('preview error:', err);
+    if (token === previewToken) showToast('Preview failed: ' + (err.message || err), 'error');
+  } finally {
+    if (token === previewToken) loading.style.display = 'none';
+  }
+}
+
 // ── Drag-to-reorder file rows ─────────────────────────────────────
 function onFileDragStart(e, idx) { dragSrcIdx = idx; e.currentTarget.classList.add('dragging'); }
 function onFileDragEnd(e)        { e.currentTarget.classList.remove('dragging'); document.querySelectorAll('.file-row').forEach(r => r.classList.remove('drag-target')); }
@@ -1595,11 +1721,14 @@ function renderSetDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="5" x2="9" y2="19"/><line x1="15" y1="5" x2="15" y2="19"/></svg>
         </div>
         <div class="file-icon ${isImg ? 'img' : 'pdf'}">${ext}</div>
-        <div class="file-details">
+        <div class="file-details" onclick="previewFile('${f.id}')" title="Click to preview">
           <div class="file-name truncate">${escHtml(f.name)}</div>
           <div class="file-size">${sizeLabel}</div>
         </div>
         <div class="file-actions">
+          <button class="btn-icon" title="Preview" onclick="previewFile('${f.id}')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
           <button class="btn-icon" title="Remove" onclick="removeFile('${f.id}')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -1656,6 +1785,7 @@ Object.assign(window, {
   triggerFilePicker, handleDragOver, handleDragLeave, handleDrop, handleFileInput,
   removeFile, exportPDF,
   toggleSidebar, closeSidebar,
+  previewFile, closePreview, closePreviewOnOverlay,
 });
 
 // ── Single source of truth for auth: restores session on every load,
@@ -1679,7 +1809,7 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cAppendy build v12 — mobile sets drawer + real contact email ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cAppendy build v13 — file preview (PDF.js) ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
