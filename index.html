@@ -571,11 +571,30 @@
     .feat-card-desc { font-size: .8rem; color: var(--muted); line-height: 1.55; }
 
     /* ── Responsive ──────────────────────────────────────────── */
+    /* Mobile sets (hamburger) button — hidden on desktop by default */
+    .nav-sets-btn { display: none; }
+    .sidebar-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 190;
+      background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+    }
+
     @media (max-width: 680px) {
-      .sidebar { display: none; }
+      /* Show the hamburger (JS adds .hidden when signed out) */
+      .nav-sets-btn:not(.hidden) { display: inline-flex; margin-right: 4px; }
+
+      /* Sidebar becomes a slide-in drawer instead of being hidden */
+      .sidebar {
+        position: fixed; top: 58px; bottom: 0; left: 0; z-index: 200;
+        width: 82%; max-width: 300px;
+        transform: translateX(-105%); transition: transform .25s ease;
+        border-right: 1px solid var(--border);
+      }
+      .sidebar.open { transform: translateX(0); box-shadow: 8px 0 40px rgba(0,0,0,.5); }
+      .sidebar-backdrop.open { display: block; }
+
       .main-header { padding: 16px 16px 0; }
       .main-body { padding: 16px; }
-      .nav { padding: 0 16px; }
+      .nav { padding: 0 14px; gap: 10px; }
     }
   </style>
 </head>
@@ -598,6 +617,11 @@
     <button class="btn btn-ghost btn-sm" onclick="openPricing()">Pricing</button>
     <button class="btn btn-primary btn-sm" onclick="openAuth()">Sign in</button>
   </div>
+
+  <!-- Mobile-only: open the sets drawer -->
+  <button class="btn-icon nav-sets-btn hidden" id="mobileSetsBtn" onclick="toggleSidebar()" title="Document sets" aria-label="Open document sets">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
 
   <!-- signed-in state (hidden until auth) -->
   <div class="nav-right hidden" id="navSignedIn">
@@ -771,8 +795,11 @@
 <div id="appView" class="hidden">
   <div class="app-shell">
 
+    <!-- Mobile drawer backdrop -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-title">Document sets</div>
         <button class="btn btn-secondary btn-sm" style="width:100%" onclick="createSet()">
@@ -787,12 +814,16 @@
     <!-- Main -->
     <main class="main">
       <!-- No set selected -->
-      <div id="emptyMain" class="empty-state" style="padding:80px 20px">
+      <div id="emptyMain" class="empty-state" style="padding:72px 20px">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
         </svg>
-        <h3>No set selected</h3>
-        <p>Pick a set from the sidebar or create a new one.</p>
+        <h3>No document set yet</h3>
+        <p>Create your first set to start adding and merging files.</p>
+        <button class="btn btn-primary btn-lg" style="margin-top:18px" onclick="createSet()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Create document set
+        </button>
       </div>
 
       <!-- Set detail -->
@@ -1205,6 +1236,8 @@ function signOut() {
   document.getElementById('landingView').classList.remove('hidden');
   document.getElementById('navSignedIn').classList.add('hidden');
   document.getElementById('navSignedOut').classList.remove('hidden');
+  document.getElementById('mobileSetsBtn').classList.add('hidden');
+  closeSidebar();
 }
 
 function showApp() {
@@ -1212,6 +1245,7 @@ function showApp() {
   document.getElementById('appView').classList.remove('hidden');
   document.getElementById('navSignedOut').classList.add('hidden');
   document.getElementById('navSignedIn').classList.remove('hidden');
+  document.getElementById('mobileSetsBtn').classList.remove('hidden');
   updateNavUser();
   renderSidebar();
   renderSidebarFooter();
@@ -1295,6 +1329,22 @@ function selectSet(id) {
   document.getElementById('setDetail').style.display = 'flex';
   renderSidebar();
   renderSetDetail();
+  closeSidebar();   // on mobile, close the drawer so files are visible
+}
+
+// ── Mobile sets drawer ────────────────────────────────────────────
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const bd = document.getElementById('sidebarBackdrop');
+  const open = !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  bd.classList.toggle('open', open);
+}
+function closeSidebar() {
+  const sb = document.getElementById('sidebar');
+  const bd = document.getElementById('sidebarBackdrop');
+  if (sb) sb.classList.remove('open');
+  if (bd) bd.classList.remove('open');
 }
 
 function renameActiveSet(name) {
@@ -1605,6 +1655,7 @@ Object.assign(window, {
   createSet, deleteCurrentSet, selectSet,
   triggerFilePicker, handleDragOver, handleDragLeave, handleDrop, handleFileInput,
   removeFile, exportPDF,
+  toggleSidebar, closeSidebar,
 });
 
 // ── Single source of truth for auth: restores session on every load,
@@ -1628,7 +1679,7 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cAppendy build v11 — legal pages, SEO, FAQ + footer ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cAppendy build v12 — mobile sets drawer + real contact email ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
