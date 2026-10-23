@@ -911,6 +911,10 @@
             <div class="export-card-title">Export as PDF</div>
             <div class="export-card-meta" id="exportMeta">Combine all files into one PDF</div>
           </div>
+          <button class="btn btn-secondary btn-lg" id="previewBtn" onclick="previewCombined()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            Preview
+          </button>
           <button class="btn btn-primary btn-lg" id="exportBtn" onclick="exportPDF()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Combine &amp; download
@@ -1476,65 +1480,109 @@ async function removeFile(fileId) {
   renderSetDetail();
 }
 
-// ── Export — real PDF merge using pdf-lib ─────────────────────────
-async function exportPDF() {
+// ── Merge all files in the active set into one PDF (shared by export + preview) ──
+async function buildMergedPdfBytes() {
   const s = sets.find(s => s.id === activeSetId);
-  if (!s || s.files.length === 0) { showToast('Add at least one file first', 'warn'); return; }
-
+  if (!s || s.files.length === 0) throw new Error('Add at least one file first');
   if (typeof PDFLib === 'undefined' || !PDFLib.PDFDocument) {
-    showToast('PDF engine still loading — try again in a moment', 'warn');
-    return;
+    throw new Error('PDF engine still loading — try again in a moment');
   }
   const { PDFDocument } = PDFLib;
+  const merged = await PDFDocument.create();
 
+  for (const f of s.files) {
+    const buffer = await getFileBytes(f.id);            // local cache, else cloud
+    if (!buffer) { showToast(`Skipping ${f.name} — data missing`, 'warn'); continue; }
+    const bytes = new Uint8Array(buffer);
+
+    if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+      const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    } else if (f.type === 'image/png') {
+      const img = await merged.embedPng(bytes);
+      addImagePage(merged, img);
+    } else if (f.type === 'image/jpeg') {
+      const img = await merged.embedJpg(bytes);
+      addImagePage(merged, img);
+    }
+  }
+  if (merged.getPageCount() === 0) throw new Error('No readable pages found');
+  return { bytes: await merged.save(), pageCount: merged.getPageCount(), name: s.name };
+}
+
+// ── Export — build the merged PDF and download it ─────────────────
+async function exportPDF() {
   const btn = document.getElementById('exportBtn');
   const originalHtml = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Combining…'; }
-
   try {
-    const merged = await PDFDocument.create();
-
-    for (const f of s.files) {
-      const buffer = await getFileBytes(f.id);            // local cache, else cloud
-      if (!buffer) { showToast(`Skipping ${f.name} — data missing`, 'warn'); continue; }
-      const bytes = new Uint8Array(buffer);
-
-      if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
-        const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
-        const pages = await merged.copyPages(src, src.getPageIndices());
-        pages.forEach(p => merged.addPage(p));
-      } else if (f.type === 'image/png') {
-        const img = await merged.embedPng(bytes);
-        addImagePage(merged, img);
-      } else if (f.type === 'image/jpeg') {
-        const img = await merged.embedJpg(bytes);
-        addImagePage(merged, img);
-      }
-    }
-
-    if (merged.getPageCount() === 0) {
-      showToast('Nothing to export — no readable pages found', 'warn');
-      return;
-    }
-
-    const pdfBytes = await merged.save();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const { bytes, pageCount, name } = await buildMergedPdfBytes();
+    const blob = new Blob([bytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const safeName = (s.name || 'document').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'document';
+    const safeName = (name || 'document').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'document';
     a.href = url;
     a.download = safeName + '.pdf';
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
-
-    showToast(`Downloaded "${safeName}.pdf" (${merged.getPageCount()} pages)`, 'success');
+    showToast(`Downloaded "${safeName}.pdf" (${pageCount} pages)`, 'success');
   } catch (err) {
     console.error(err);
     showToast('Export failed: ' + (err.message || 'could not read a file'), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
+  }
+}
+
+// ── Preview the combined result (before download) ─────────────────
+async function previewCombined() {
+  const token = ++previewToken;
+  const modal   = document.getElementById('previewModal');
+  const title   = document.getElementById('previewTitle');
+  const loading = document.getElementById('previewLoading');
+  const pages   = document.getElementById('previewPages');
+
+  title.textContent = 'Combined preview';
+  pages.innerHTML = '';
+  loading.style.display = 'flex';
+  modal.classList.remove('hidden');
+
+  try {
+    const { bytes } = await buildMergedPdfBytes();
+    if (token !== previewToken) return;
+    if (!window.pdfjsLib) throw new Error('PDF viewer still loading — try again');
+    const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+    if (token !== previewToken) return;
+    const maxPages = Math.min(pdf.numPages, 30);
+    for (let n = 1; n <= maxPages; n++) {
+      if (token !== previewToken) return;
+      const page = await pdf.getPage(n);
+      const viewport = page.getViewport({ scale: 1.4 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      if (token !== previewToken) return;
+      pages.appendChild(canvas);
+      const label = document.createElement('div');
+      label.className = 'preview-pagenum';
+      label.textContent = `Page ${n} of ${pdf.numPages}`;
+      pages.appendChild(label);
+    }
+    if (pdf.numPages > maxPages) {
+      const more = document.createElement('div');
+      more.className = 'preview-pagenum';
+      more.textContent = `… ${pdf.numPages - maxPages} more page(s) not shown in preview`;
+      pages.appendChild(more);
+    }
+  } catch (err) {
+    console.error('combined preview error:', err);
+    if (token === previewToken) showToast('Preview failed: ' + (err.message || err), 'error');
+  } finally {
+    if (token === previewToken) loading.style.display = 'none';
   }
 }
 
@@ -1785,7 +1833,7 @@ Object.assign(window, {
   triggerFilePicker, handleDragOver, handleDragLeave, handleDrop, handleFileInput,
   removeFile, exportPDF,
   toggleSidebar, closeSidebar,
-  previewFile, closePreview, closePreviewOnOverlay,
+  previewFile, previewCombined, closePreview, closePreviewOnOverlay,
 });
 
 // ── Single source of truth for auth: restores session on every load,
@@ -1809,7 +1857,7 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cAppendy build v13 — file preview (PDF.js) ✅', 'color:#8b5cf6;font-weight:bold');
+console.log('%cAppendy build v14 — visible Preview button for combined result ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
