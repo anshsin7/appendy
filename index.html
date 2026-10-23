@@ -492,7 +492,34 @@
     .landing {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       min-height: calc(100vh - 58px); padding: 72px 20px; text-align: center;
+      position: relative; isolation: isolate;
     }
+
+    /* ✨ Floating aurora orbs behind the hero */
+    .landing .aurora { position: absolute; inset: -10% -5%; z-index: -2; pointer-events: none; filter: blur(60px); opacity: .55; }
+    .landing .orb { position: absolute; border-radius: 50%; }
+    .landing .orb.a { width: 380px; height: 380px; left: 8%;  top: 6%;  background: radial-gradient(circle, #6366f1, transparent 70%); animation: float1 14s ease-in-out infinite; }
+    .landing .orb.b { width: 320px; height: 320px; right: 10%; top: 20%; background: radial-gradient(circle, #ec4899, transparent 70%); animation: float2 17s ease-in-out infinite; }
+    .landing .orb.c { width: 300px; height: 300px; left: 42%; bottom: 2%; background: radial-gradient(circle, #8b5cf6, transparent 70%); animation: float3 20s ease-in-out infinite; }
+    @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(40px,30px)} }
+    @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-50px,40px)} }
+    @keyframes float3 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,-40px)} }
+
+    /* ✨ Cursor spotlight on the hero */
+    .landing .spotlight {
+      position: absolute; inset: 0; z-index: -1; pointer-events: none;
+      background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 30%), #818cf822, transparent 65%);
+      transition: background .1s;
+    }
+
+    /* ✨ Shimmer sweep across primary buttons on hover */
+    .btn-primary { position: relative; overflow: hidden; }
+    .btn-primary::after {
+      content: ''; position: absolute; top: 0; left: -120%; width: 60%; height: 100%;
+      background: linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent);
+      transform: skewX(-18deg); transition: left .55s ease;
+    }
+    .btn-primary:hover::after { left: 140%; }
 
     /* ── Who-uses section ────────────────────────────────────── */
     .use-cases { max-width: 1040px; margin: 0 auto; padding: 24px 20px 96px; }
@@ -558,6 +585,15 @@
     .site-footer-copy {
       max-width: 1040px; margin: 0 auto; padding: 14px 24px 28px;
       border-top: 1px solid var(--border); color: var(--muted2); font-size: .78rem;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .made-by { display: inline-flex; align-items: center; gap: 4px; }
+    .made-by .eth {
+      font-weight: 700;
+      background: linear-gradient(135deg, #6366f1, #a78bfa, #ec4899);
+      background-size: 200% auto;
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+      animation: shimmer 5s linear infinite;
     }
     .landing > * { animation: fadeUp .6s ease backwards; }
     .landing-badge { animation-delay: .05s; }
@@ -674,8 +710,10 @@
 
 <!-- ── Landing page (signed out) ───────────────────────────────── -->
 <div id="landingView">
-  <section class="landing">
-    <div class="landing-badge">✦ Free to start · Pay once · No subscription</div>
+  <section class="landing" id="heroSection">
+    <div class="aurora"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
+    <div class="spotlight" id="heroSpotlight"></div>
+    <div class="landing-badge">✦ Built by an ETH Zürich student · Free to start</div>
     <h1>Merge your PDFs and images<br /><span>into one clean file</span></h1>
     <p>Appendy turns scattered PDFs, scans and photos into a single, neatly ordered PDF. Drag to reorder, click once, done — no software to install.</p>
     <div class="landing-actions">
@@ -823,7 +861,10 @@
         <a href="/refund.html">Refund Policy</a>
       </nav>
     </div>
-    <div class="site-footer-copy">© 2026 Appendy. All rights reserved.</div>
+    <div class="site-footer-copy">
+      <span>© 2026 Appendy. All rights reserved.</span>
+      <span class="made-by">Made with ♥ by an <span class="eth">ETH Zürich</span> student</span>
+    </div>
   </footer>
 </div>
 
@@ -1857,7 +1898,20 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────
-console.log('%cAppendy build v14 — visible Preview button for combined result ✅', 'color:#8b5cf6;font-weight:bold');
+// ✨ Cursor-following spotlight on the hero
+(function () {
+  const hero = document.getElementById('heroSection');
+  const spot = document.getElementById('heroSpotlight');
+  if (hero && spot) {
+    hero.addEventListener('pointermove', (e) => {
+      const r = hero.getBoundingClientRect();
+      spot.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+      spot.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+    });
+  }
+})();
+
+console.log('%cAppendy build v15 — effects + ETH Zürich credit ✅', 'color:#8b5cf6;font-weight:bold');
 init();
 </script>
 </body>
