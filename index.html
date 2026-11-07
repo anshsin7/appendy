@@ -368,12 +368,16 @@
       display: flex; align-items: center; justify-content: center; gap: 10px;
       color: var(--muted); height: 100%; font-size: .9rem;
     }
-    .preview-pages { display: flex; flex-direction: column; align-items: center; gap: 16px; }
-    .preview-pages canvas, .preview-pages img {
-      max-width: 100%; height: auto; border-radius: 6px;
+    /* Continuous document view: pages sit flush, one after another, no gaps or labels. */
+    .preview-pages {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+      width: fit-content; max-width: 100%; margin: 0 auto;
       box-shadow: 0 8px 30px rgba(0,0,0,.5); background: #fff;
     }
-    .preview-pagenum { color: var(--muted2); font-size: .72rem; }
+    .preview-pages:empty { box-shadow: none; background: transparent; }
+    .preview-pages canvas, .preview-pages img {
+      display: block; max-width: 100%; height: auto; background: #fff;
+    }
     @media (max-width: 680px) { .preview-box { height: 92vh; max-width: 100%; } .preview-body { padding: 12px; } }
 
     /* ── Export card ─────────────────────────────────────────── */
@@ -1608,6 +1612,7 @@ async function previewCombined() {
     if (!window.pdfjsLib) throw new Error('PDF viewer still loading — try again');
     const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
     if (token !== previewToken) return;
+    title.textContent = `Combined preview · ${pdf.numPages} page${pdf.numPages !== 1 ? 's' : ''}`;
     for (let n = 1; n <= pdf.numPages; n++) {   // render every page
       if (token !== previewToken) return;
       const page = await pdf.getPage(n);
@@ -1618,10 +1623,6 @@ async function previewCombined() {
       await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
       if (token !== previewToken) return;
       pages.appendChild(canvas);
-      const label = document.createElement('div');
-      label.className = 'preview-pagenum';
-      label.textContent = `Page ${n} of ${pdf.numPages}`;
-      pages.appendChild(label);
     }
   } catch (err) {
     console.error('combined preview error:', err);
@@ -1684,6 +1685,7 @@ async function previewFile(fileId) {
       if (!window.pdfjsLib) throw new Error('PDF viewer still loading — try again');
       const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
       if (token !== previewToken) return;
+      title.textContent = `${f.name} · ${pdf.numPages} page${pdf.numPages !== 1 ? 's' : ''}`;
       for (let n = 1; n <= pdf.numPages; n++) {   // render every page
         if (token !== previewToken) return;
         const page = await pdf.getPage(n);
@@ -1694,10 +1696,6 @@ async function previewFile(fileId) {
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
         if (token !== previewToken) return;
         pages.appendChild(canvas);
-        const label = document.createElement('div');
-        label.className = 'preview-pagenum';
-        label.textContent = `Page ${n} of ${pdf.numPages}`;
-        pages.appendChild(label);
       }
     }
   } catch (err) {
