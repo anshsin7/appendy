@@ -1125,6 +1125,7 @@ setPersistence(auth, browserLocalPersistence).catch(() => {});
 // ── Constants ────────────────────────────────────────────────────
 const FREE_SET_LIMIT  = 2;
 const FREE_FILE_LIMIT = 10 * 1024 * 1024; // 10 MB per file
+const MAX_FILE_LIMIT  = 50 * 1024 * 1024; // 50 MB hard cap for everyone — enforced server-side by storage.rules
 const LS_USER_KEY     = 'ds_user';
 const LS_SETS_KEY     = 'ds_sets';   // metadata only (names/order/file info) — tiny, safe in localStorage
 const LS_PLAN_KEY     = 'ds_plan';
@@ -1194,11 +1195,11 @@ function uid() { return currentUser && currentUser.uid; }
 // (which is free). storageOK flips to false the first time a Storage call fails.
 let storageOK = true;
 
-async function cloudSaveFile(fileId, arrayBuffer) {
+async function cloudSaveFile(fileId, arrayBuffer, contentType) {
   if (!uid() || !storageOK) return;
   try {
     const r = storageRef(fstor, `users/${uid()}/${fileId}`);
-    await uploadBytes(r, arrayBuffer);
+    await uploadBytes(r, arrayBuffer, { contentType }); // storage.rules only accept PDF/PNG/JPEG
   } catch (e) {
     storageOK = false;
     console.warn('Cloud Storage unavailable — files kept on this device only.', e.code || e);
@@ -1498,12 +1499,17 @@ async function addFiles(files) {
       showToast(`${file.name} is over the 10 MB free limit — upgrade for larger files`, 'warn');
       continue;
     }
+    if (file.size > MAX_FILE_LIMIT) {
+      showToast(`${file.name} is over the 50 MB per-file limit`, 'warn');
+      continue;
+    }
     try {
       const buffer = await file.arrayBuffer();           // raw binary, no base64 bloat
       const id = 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2);
       try { await blobPut(id, buffer); } catch (e) { console.warn('local cache failed', e); }
-      await cloudSaveFile(id, buffer);                    // durable cloud copy (best effort)
-      s.files.push({ id, name: file.name, size: file.size, type: isPdf ? 'application/pdf' : file.type });
+      const type = isPdf ? 'application/pdf' : file.type;
+      await cloudSaveFile(id, buffer, type);              // durable cloud copy (best effort)
+      s.files.push({ id, name: file.name, size: file.size, type });
       added++;
     } catch (err) {
       console.error('addFiles error:', err);
@@ -1610,7 +1616,7 @@ async function previewCombined() {
     const { bytes } = await buildMergedPdfBytes();
     if (token !== previewToken) return;
     if (!window.pdfjsLib) throw new Error('PDF viewer still loading — try again');
-    const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
+    const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false }).promise;
     if (token !== previewToken) return;
     title.textContent = `Combined preview · ${pdf.numPages} page${pdf.numPages !== 1 ? 's' : ''}`;
     for (let n = 1; n <= pdf.numPages; n++) {   // render every page
@@ -1683,7 +1689,7 @@ async function previewFile(fileId) {
     } else {
       // Render each PDF page to a canvas with PDF.js.
       if (!window.pdfjsLib) throw new Error('PDF viewer still loading — try again');
-      const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+      const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false }).promise;
       if (token !== previewToken) return;
       title.textContent = `${f.name} · ${pdf.numPages} page${pdf.numPages !== 1 ? 's' : ''}`;
       for (let n = 1; n <= pdf.numPages; n++) {   // render every page
@@ -1827,7 +1833,7 @@ function renderSetDetail() {
   }
 
   // Dropzone hint
-  const limitTxt = isLifetime() ? 'unlimited size' : 'max 10 MB per file';
+  const limitTxt = isLifetime() ? 'max 50 MB per file' : 'max 10 MB per file';
   document.getElementById('dropzoneHint').textContent = `PDF, PNG, JPG · ${limitTxt}`;
 
   // Storage warning reflects whether cloud Storage is actually enabled.
